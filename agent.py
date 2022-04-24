@@ -191,7 +191,7 @@ class Agent():
   def save(self, path):
     torch.save(self.qnetwork_local.state_dict(), path)
 
-  def load_weights(self, root_path):
+  def load_weights(self, root_path=path):
     self.qnetwork_local.load_state_dict(torch.load(root_path+'weights.pth'))
     self.qnetwork_local.eval()
 
