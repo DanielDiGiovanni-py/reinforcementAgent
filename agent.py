@@ -151,15 +151,15 @@ class Agent():
     self.seed = random.seed(1)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.tau = 1e-3
-    self.g = 0.99
-    self.UPDATE_EVERY = 10
+    self.g = 0.9
+    self.UPDATE_EVERY = 1
     self.worker = 1
-    self.BUFFER_SIZE = int(1e5)
+    self.BUFFER_SIZE = int(1e3)
     self.BATCH_SIZE = 128 * self.worker
-    self.LR = 0.000025
+    self.LR = 0.0001
     self.Q_updates = 0
     self.layer_size = 8192
-    self.n_step = 100
+    self.n_step = 200
 
     # Q-Network
     print()
@@ -176,7 +176,6 @@ class Agent():
     # Initialize time step
     self.t_step = 0
 
-
   def update(self, state, action, reward, next_state, done):
     # Save experience in replay memory
     self.memory.add(np.concatenate((state[0], state[2])), action, reward, np.concatenate((next_state[0], next_state[2])), done)
@@ -192,8 +191,8 @@ class Agent():
   def save(self, path):
     torch.save(self.qnetwork_local.state_dict(), path)
 
-  def load_weights(self, path):
-    self.qnetwork_local.load_state_dict(torch.load(path))
+  def load_weights(self, root_path=path):
+    self.qnetwork_local.load_state_dict(torch.load(root_path+'weights.pth'))
     self.qnetwork_local.eval()
 
   def act(self, state, eps=0.1, mode='eval'):
