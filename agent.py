@@ -162,12 +162,10 @@ class Agent():
     self.n_step = 200
 
     # Q-Network
-    print()
     self.qnetwork_local = DDQN(self.state_space, self.action_space, self.layer_size).to(self.device)
     self.qnetwork_target = DDQN(self.state_space, self.action_space, self.layer_size).to(self.device)
 
     self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.LR)
-    print(self.qnetwork_local)
 
     # Replay memory
     self.memory = PrioritizedReplay(self.BUFFER_SIZE, self.BATCH_SIZE, seed=self.seed, g=self.g, n_step=self.n_step,
