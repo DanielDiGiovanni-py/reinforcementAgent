@@ -159,7 +159,7 @@ class Agent():
     self.BATCH_SIZE = 8192 * self.worker
     self.LR = 0.0001
     self.Q_updates = 0
-    self.layer_size = 2048
+    self.layer_size = 1024
     self.n_step = 225
     self.eps = 0.5
 
@@ -203,7 +203,7 @@ class Agent():
     """
     # Epsilon-greedy action selection
     if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
-      self.eps *= 0.99999
+      self.eps *= .9996
       state = np.concatenate((state[0], state[2]))
       state = torch.from_numpy(state).float().to(self.device)
 
