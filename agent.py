@@ -152,23 +152,23 @@ class Agent():
     self.seed = random.seed(0)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.tau = 1e-3
-    self.g = 0.9
-    self.UPDATE_EVERY = 2500
+    self.g = 0.99
+    self.UPDATE_EVERY = 1
     self.worker = 1
-    self.BUFFER_SIZE = int(1e6)
-    self.BATCH_SIZE = 32768 * self.worker
+    self.BUFFER_SIZE = int(1e4)
+    self.BATCH_SIZE = 8 * self.worker
     self.LR = 0.00025
     self.Q_updates = 0
-    self.layer_size = 1024
-    self.n_step = 1000
-    self.eps = 1.0
+    self.layer_size = 8
+    self.n_step = 5
+    self.eps = 0.5
 
     # Q-Network
     print()
     self.qnetwork_local = DQN(self.state_space, self.action_space, self.layer_size).to(self.device)
     self.qnetwork_target = DQN(self.state_space, self.action_space, self.layer_size).to(self.device)
 
-    self.optimizer = optim.SGD(self.qnetwork_local.parameters(), lr=self.LR, momentum=0.9)
+    self.optimizer = optim.SGD(self.qnetwork_local.parameters(), lr=self.LR, momentum=0.9, weight_decay=0.000001)
     print(self.qnetwork_local)
 
     # Replay memory
@@ -203,7 +203,7 @@ class Agent():
     """
     # Epsilon-greedy action selection
     if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
-      self.eps *= .999999
+      self.eps *= .99998
       state = np.concatenate((state[0], state[2]))
       state = torch.from_numpy(state).float().to(self.device)
 
