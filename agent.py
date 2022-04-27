@@ -160,7 +160,7 @@ class Agent():
     self.LR = 0.00025
     self.Q_updates = 0
     self.layer_size = 8
-    self.n_step = 5
+    self.n_step = 10
     self.eps = 0.5
 
     # Q-Network
