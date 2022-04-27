@@ -6,6 +6,7 @@ from collections import deque
 import random
 import torch
 import torch.optim as optim
+import math
 
 
 class PrioritizedReplay(object):
@@ -114,29 +115,29 @@ def weight_init(layers):
   for layer in layers:
     torch.nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
 
-class DDQN(nn.Module):
+class DQN(nn.Module):
   def __init__(self, state_space, action_space, layer_size):
-    super(DDQN, self).__init__()
+    super(DQN, self).__init__()
     self.seed = torch.manual_seed(1)
     self.input_shape = state_space
     self.action_space = action_space
 
-    self.head_1 = nn.Linear(self.input_shape, layer_size)
-    self.ff_1 = nn.Linear(layer_size, layer_size)
-    self.ff_2 = nn.Linear(layer_size, layer_size)
-    self.ff_3 = nn.Linear(layer_size, layer_size)
-    self.ff_4 = nn.Linear(layer_size, layer_size)
-    self.ff_5 = nn.Linear(layer_size, action_space)
-    weight_init([self.head_1, self.ff_1, self.ff_2, self.ff_3, self.ff_4, self.ff_5])
+    self.input_layer = nn.Linear(self.input_shape, layer_size)
+    self.layer_1 = nn.Linear(layer_size, layer_size)
+    self.layer_2 = nn.Linear(layer_size, layer_size)
+    self.layer_3 = nn.Linear(layer_size, layer_size)
+    self.layer_4 = nn.Linear(layer_size, layer_size)
+    self.layer_5 = nn.Linear(layer_size, action_space)
+    weight_init([self.input_layer, self.layer_1, self.layer_2, self.layer_3, self.layer_4, self.layer_5])
 
   def forward(self, input):
-    x = torch.relu(self.head_1(input))
-    x = torch.relu(self.ff_1(x))
-    x = torch.relu(self.ff_2(x))
-    x = torch.relu(self.ff_3(x))
-    x = torch.relu(self.ff_4(x))
+    x = torch.relu(self.input_layer(input))
+    x = torch.relu(self.layer_1(x))
+    x = torch.relu(self.layer_2(x))
+    x = torch.relu(self.layer_3(x))
+    x = torch.relu(self.layer_4(x))
 
-    out = self.ff_5(x)
+    out = self.layer_5(x)
 
     return out
 
@@ -148,24 +149,27 @@ class Agent():
     """
     self.state_space = env_specs['scent_space'].shape[0] + env_specs['feature_space'].shape[0]
     self.action_space = env_specs['action_space'].n
-    self.seed = random.seed(1)
+    self.seed = random.seed(0)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.tau = 1e-3
     self.g = 0.99
-    self.UPDATE_EVERY = 1000
+    self.UPDATE_EVERY = 2500
     self.worker = 1
-    self.BUFFER_SIZE = int(1e3)
-    self.BATCH_SIZE = 128 * self.worker
-    self.LR = 0.00025
+    self.BUFFER_SIZE = int(1e5)
+    self.BATCH_SIZE = 8192 * self.worker
+    self.LR = 0.0001
     self.Q_updates = 0
-    self.layer_size = 8192
+    self.layer_size = 2048
     self.n_step = 225
+    self.eps = 0.5
 
     # Q-Network
-    self.qnetwork_local = DDQN(self.state_space, self.action_space, self.layer_size).to(self.device)
-    self.qnetwork_target = DDQN(self.state_space, self.action_space, self.layer_size).to(self.device)
+    print()
+    self.qnetwork_local = DQN(self.state_space, self.action_space, self.layer_size).to(self.device)
+    self.qnetwork_target = DQN(self.state_space, self.action_space, self.layer_size).to(self.device)
 
     self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.LR)
+    print(self.qnetwork_local)
 
     # Replay memory
     self.memory = PrioritizedReplay(self.BUFFER_SIZE, self.BATCH_SIZE, seed=self.seed, g=self.g, n_step=self.n_step,
@@ -193,13 +197,13 @@ class Agent():
     self.qnetwork_local.load_state_dict(torch.load(root_path+'weights.pth'))
     self.qnetwork_local.eval()
 
-  def act(self, state, eps=0.1, mode='eval'):
+  def act(self, state, mode='eval'):
     """Returns actions for given state as per current policy.
     
     """
-
     # Epsilon-greedy action selection
-    if random.random() > eps:  # select greedy action if random number is higher than epsilon
+    if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
+      self.eps *= 0.99999
       state = np.concatenate((state[0], state[2]))
       state = torch.from_numpy(state).float().to(self.device)
 
