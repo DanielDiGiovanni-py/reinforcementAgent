@@ -152,7 +152,7 @@ class Agent():
     self.seed = random.seed(0)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.tau = 1e-3
-    self.g = 0.99
+    self.g = 0.9
     self.UPDATE_EVERY = 2500
     self.worker = 1
     self.BUFFER_SIZE = int(1e6)
@@ -178,11 +178,11 @@ class Agent():
     # Initialize time step
     self.t_step = 0
 
-  def update(self, state, action, reward, next_state, done):
+  def update(self, state, action, reward, next_state, done, timestep):
     # Save experience in replay memory
     self.memory.add(np.concatenate((state[0], state[2])), action, reward, np.concatenate((next_state[0], next_state[2])), done)
     # Learn every UPDATE_EVERY time steps.
-    self.t_step = (self.t_step + 1) % self.UPDATE_EVERY
+    self.t_step = timestep % self.UPDATE_EVERY
     if self.t_step == 0:
       # If there are enough samples, then get a random subset and learn
       if len(self.memory) > self.BATCH_SIZE:
@@ -203,7 +203,7 @@ class Agent():
     """
     # Epsilon-greedy action selection
     if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
-      self.eps *= .9999
+      self.eps *= .999999
       state = np.concatenate((state[0], state[2]))
       state = torch.from_numpy(state).float().to(self.device)
 
