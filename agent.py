@@ -151,15 +151,15 @@ class Agent():
     self.seed = random.seed(1)
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.tau = 1e-3
-    self.g = 0.9
-    self.UPDATE_EVERY = 1
+    self.g = 0.99
+    self.UPDATE_EVERY = 1000
     self.worker = 1
     self.BUFFER_SIZE = int(1e3)
     self.BATCH_SIZE = 128 * self.worker
-    self.LR = 0.0001
+    self.LR = 0.00025
     self.Q_updates = 0
     self.layer_size = 8192
-    self.n_step = 200
+    self.n_step = 225
 
     # Q-Network
     self.qnetwork_local = DDQN(self.state_space, self.action_space, self.layer_size).to(self.device)
