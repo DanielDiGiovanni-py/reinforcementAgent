@@ -201,25 +201,34 @@ class Agent():
     """Returns actions for given state as per current policy.
     
     """
-    # Epsilon-greedy action selection
-    if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
-      self.eps *= .99998
+    if mode== 'train':
+      # Epsilon-greedy action selection
+      if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
+        self.eps *= .999998
+        state = np.concatenate((state[0], state[2]))
+        state = torch.from_numpy(state).float().to(self.device)
+  
+        self.qnetwork_local.eval()
+        with torch.no_grad():
+          action_values = self.qnetwork_local(state)
+        self.qnetwork_local.train()
+        action = np.argmax(action_values.cpu().data.numpy())
+        return action
+  
+      else:
+          action = random.choices(np.arange(self.action_space), k=self.worker)
+          return action[0]
+        
+    if mode == 'eval':
       state = np.concatenate((state[0], state[2]))
       state = torch.from_numpy(state).float().to(self.device)
-
+  
       self.qnetwork_local.eval()
       with torch.no_grad():
         action_values = self.qnetwork_local(state)
       self.qnetwork_local.train()
       action = np.argmax(action_values.cpu().data.numpy())
       return action
-
-    else:
-      if mode == 'eval':
-        action = random.choices(np.arange(self.action_space), k=1)
-      else:
-        action = random.choices(np.arange(self.action_space), k=self.worker)
-      return action[0]
 
 
   def soft_update(self, local_model, target_model):
