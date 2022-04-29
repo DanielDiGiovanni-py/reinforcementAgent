@@ -251,7 +251,7 @@ class Agent():
     if mode == 'train' or mode == 'eval':
       # Epsilon-greedy action selection
       if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
-        self.eps *= .9999998
+        self.eps *= .999998
         state = np.concatenate((state[0], state[2]))
         state = torch.from_numpy(state).float().to(self.device)
 
