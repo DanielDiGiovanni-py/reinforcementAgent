@@ -1,4 +1,3 @@
-
 import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
 import numpy as np
@@ -48,7 +47,6 @@ class PrioritizedReplay(object):
     distribution in an uncontrolled fashion, and therefore changes the solution that the estimates will
     converge to (even if the policy and state distribution are fixed). We can correct this bias by using
     importance-sampling (IS) weights"
-
     """
     return min(1.0, self.b_start + frame_idx * (1.0 - self.b_start) / self.b_frames)
 
@@ -116,51 +114,35 @@ def weight_init(layers):
     torch.nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
 
 class DQN(nn.Module):
-  def __init__(self, state_space, action_space, layer_size, N_ATOMS=51, VMAX=10, VMIN=-10):
+  def __init__(self, state_space, action_space, layer_size):
     super(DQN, self).__init__()
     self.seed = torch.manual_seed(1)
     self.input_shape = state_space
     self.action_space = action_space
-    self.N_ATOMS = N_ATOMS
-    self.VMAX = VMAX
-    self.VMIN = VMIN
-    self.DZ = (VMAX - VMIN) / (N_ATOMS - 1)
 
     self.input_layer = nn.Linear(self.input_shape, layer_size)
     self.layer_1 = nn.Linear(layer_size, layer_size)
     self.layer_2 = nn.Linear(layer_size, layer_size)
     self.layer_3 = nn.Linear(layer_size, layer_size)
     self.layer_4 = nn.Linear(layer_size, layer_size)
-    self.layer_5 = nn.Linear(layer_size, action_space*N_ATOMS)
+    self.layer_5 = nn.Linear(layer_size, action_space)
     weight_init([self.input_layer, self.layer_1, self.layer_2, self.layer_3, self.layer_4, self.layer_5])
 
-    self.register_buffer("supports", torch.arange(VMIN, VMAX + self.DZ, self.DZ)) # basic value vector - shape n_atoms stepsize dz
-    self.softmax = nn.Softmax(dim=1)
-
   def forward(self, input):
-    m = nn.GELU()
-    x = m(self.input_layer(input))
-    x = m(self.layer_1(x))
-    x = m(self.layer_2(x))
-    x = m(self.layer_3(x))
-    x = m(self.layer_4(x))
+    x = torch.relu(self.input_layer(input))
+    x = torch.relu(self.layer_1(x))
+    x = torch.relu(self.layer_2(x))
+    x = torch.relu(self.layer_3(x))
+    x = torch.relu(self.layer_4(x))
 
-    q_distr = self.layer_5(x)
-    prob = self.softmax(q_distr.view(-1, self.N_ATOMS)).view(-1, self.action_space, self.N_ATOMS)
-    return prob
+    out = self.layer_5(x)
 
-  def act(self, state):
-    prob = self.forward(state).data.cpu()
-    # create value distribution for each action - shape: (batch_size, action_space, 51)
-    expected_value = prob.cpu() * self.supports.cpu()
-    # sum up the prob*values for the action dimension - shape: (batch_size, action_space)
-    actions = expected_value.sum(2)
-    return actions
+    return out
+
 
 class Agent():
   def __init__(self, env_specs):
     """Initialize an Agent object.
-
     """
     self.state_space = env_specs['scent_space'].shape[0] + env_specs['feature_space'].shape[0]
     self.action_space = env_specs['action_space'].n
@@ -178,16 +160,12 @@ class Agent():
     self.n_step = 10
     self.eps = 0.5
 
-    self.N_ATOMS = 51
-    self.VMAX = 10
-    self.VMIN = -10
-
     # Q-Network
     print()
     self.qnetwork_local = DQN(self.state_space, self.action_space, self.layer_size).to(self.device)
     self.qnetwork_target = DQN(self.state_space, self.action_space, self.layer_size).to(self.device)
 
-    self.optimizer = optim.SGD(self.qnetwork_local.parameters(), lr=self.LR, momentum=0.9, weight_decay=0.00001)
+    self.optimizer = optim.SGD(self.qnetwork_local.parameters(), lr=self.LR, momentum=0.9, weight_decay=0.000001)
     print(self.qnetwork_local)
 
     # Replay memory
@@ -196,34 +174,6 @@ class Agent():
 
     # Initialize time step
     self.t_step = 0
-
-  def projection_distribution(self, next_distr, next_state, rewards, dones):
-    """
-    """
-    batch_size = next_state.size(0)
-    # create support atoms
-    delta_z = float(self.VMAX - self.VMIN) / (self.N_ATOMS - 1)
-    support = torch.linspace(self.VMIN, self.VMAX, self.N_ATOMS)
-    support = support.unsqueeze(0).expand_as(next_distr).to(self.device)
-
-    rewards = rewards.expand_as(next_distr)
-    dones = dones.expand_as(next_distr)
-
-    ## Compute the projection of T̂ z onto the support {z_i}
-    Tz = rewards + (1 - dones) * self.g ** self.n_step * support
-    Tz = Tz.clamp(min=self.VMIN, max=self.VMAX)
-    b = ((Tz - self.VMIN) / delta_z).cpu()  # .to(self.device)
-    l = b.floor().long().cpu()  # .to(self.device)
-    u = b.ceil().long().cpu()  # .to(self.device)
-
-    offset = torch.linspace(0, (batch_size - 1) * self.N_ATOMS, batch_size).long() \
-      .unsqueeze(1).expand(batch_size, self.N_ATOMS)
-    # Distribute probability of T̂ z
-    proj_dist = torch.zeros(next_distr.size())
-    proj_dist.view(-1).index_add_(0, (l + offset).view(-1), (next_distr.cpu() * (u.float() - b)).view(-1))
-    proj_dist.view(-1).index_add_(0, (u + offset).view(-1), (next_distr.cpu() * (b - l.float())).view(-1))
-
-    return proj_dist
 
   def update(self, state, action, reward, next_state, done, timestep):
     # Save experience in replay memory
@@ -248,34 +198,25 @@ class Agent():
     """Returns actions for given state as per current policy.
     
     """
-    if mode == 'train' or mode == 'eval':
-      # Epsilon-greedy action selection
-      if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
-        self.eps *= .999998
-        state = np.concatenate((state[0], state[2]))
-        state = torch.from_numpy(state).float().to(self.device)
+    # Epsilon-greedy action selection
+    if random.random() > self.eps:  # select greedy action if random number is higher than epsilon
+      self.eps *= .99998
+      state = np.concatenate((state[0], state[2]))
+      state = torch.from_numpy(state).float().to(self.device)
 
-        self.qnetwork_local.eval()
-        with torch.no_grad():
-          action_values = self.qnetwork_local(state)
-        self.qnetwork_local.train()
-        action = np.argmax(np.argmax(action_values.cpu().data.numpy(), axis=2))
-        return action
+      self.qnetwork_local.eval()
+      with torch.no_grad():
+        action_values = self.qnetwork_local(state)
+      self.qnetwork_local.train()
+      action = np.argmax(action_values.cpu().data.numpy())
+      return action
 
+    else:
+      if mode == 'eval':
+        action = random.choices(np.arange(self.action_space), k=1)
       else:
-          action = random.choices(np.arange(self.action_space), k=self.worker)
-          return action[0]
-
-    #if mode == 'peach':
-      #state = np.concatenate((state[0], state[2]))
-      #state = torch.from_numpy(state).float().to(self.device)
-
-      #self.qnetwork_local.eval()
-      #with torch.no_grad():
-        #action_values = self.qnetwork_local(state)
-      #self.qnetwork_local.train()
-      #action = np.argmax(np.argmax(action_values.cpu().data.numpy(), axis=2))
-      #return action
+        action = random.choices(np.arange(self.action_space), k=self.worker)
+      return action[0]
 
 
   def soft_update(self, local_model, target_model):
@@ -301,35 +242,23 @@ class Agent():
     dones = torch.FloatTensor(dones).to(self.device).unsqueeze(1)
     weights = torch.FloatTensor(weights).unsqueeze(1).to(self.device)
 
-    batch_size = self.BATCH_SIZE
-    self.optimizer.zero_grad()
-    # next_state distribution
-    next_distr = self.qnetwork_target(next_states)
-    next_actions = self.qnetwork_target.act(next_states)
-    # chose max action indx
-    next_actions = next_actions.max(1)[1].data.cpu().numpy()
-    # gather best distr
-    next_best_distr = next_distr[range(batch_size), next_actions]
-
-    proj_distr = self.projection_distribution(next_best_distr, next_states, rewards, dones).to(self.device)
-
+    # Get max predicted Q values (for next states) from target model
+    Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
+    # Compute Q targets for current states
+    Q_targets = rewards + (self.g ** self.n_step * Q_targets_next * (1 - dones))
+    # Get expected Q values from local model
+    Q_expected = self.qnetwork_local(states).gather(1, actions)
     # Compute loss
-    # calculates the prob_distribution for the actions based on the given state
-    prob_distr = self.qnetwork_local(states)
-    actions = actions.unsqueeze(1).expand(batch_size, 1, self.N_ATOMS)
-    # gathers the prob_distribution for the chosen action
-    state_action_prob = prob_distr.gather(1, actions).squeeze(1)
-    loss_prio = -((state_action_prob.log() * proj_distr.detach()).sum(dim=1).unsqueeze(1) * weights)  # at some point none values arise
-    # print("LOSS: ",loss_prio)
-    loss = loss_prio.mean()
-
+    td_error = Q_targets - Q_expected
+    loss = (td_error.pow(2) * weights).mean().to(self.device)
     # Minimize the loss
     loss.backward()
     clip_grad_norm_(self.qnetwork_local.parameters(), 1)
     self.optimizer.step()
 
-    # ------------------- update target network ------------------- #
+    # update target network
     self.soft_update(self.qnetwork_local, self.qnetwork_target)
     # update per priorities
-    self.memory.update_priorities(idx, abs(loss_prio.data.cpu().numpy()))
+    self.memory.update_priorities(idx, abs(td_error.data.cpu().numpy()))
+
     return loss.detach().cpu().numpy()
